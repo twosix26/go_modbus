@@ -34,7 +34,7 @@ func GetBit1(word []byte, bit uint16) bool {
 
 func DataPointTabler(output map[string]Table)  {
 	//解析json文件点表
-	b, e := ioutil.ReadFile("data_map.json")
+	b, e := ioutil.ReadFile("data_map2.json")
 	if e != nil {panic(e)}
 	if e = json.Unmarshal(b, &output); e != nil {panic(e)}
 }
