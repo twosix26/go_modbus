@@ -1,13 +1,16 @@
 package main
 
 import (
-	"git.leaniot.cn/publicLib/go-modbus"
 	"time"
 	"log"
-	"encoding/json"
-	"io/ioutil"
 	"strings"
 	"strconv"
+	"bytes"
+	"encoding/json"
+	"io/ioutil"
+//	"net/url"
+	"net/http"
+	"git.leaniot.cn/publicLib/go-modbus"
 	"gopkg.in/yaml.v2"
 )
 var config Config
@@ -18,6 +21,20 @@ type Table struct {
 	Type 	string 	`json:"type"`
 	Digits 	int 	`json:"digits"`
 }
+type TableNew struct {
+	Key 	string  `json:"key"`
+	Define	string 	`json:"define"`
+	Unit 	string 	`json:"unit"`
+	Type 	string 	`json:"type"`
+	Digits 	int 	`json:"digits"`
+	Data  	interface{}	`json:"data"`
+}
+
+//type MessageSend struct {
+	
+//}
+
+ 
 
 type Device struct {
 	Address string  `yaml:"address"`
@@ -62,7 +79,19 @@ func GenModbusClient() (modbus.Client, error){
 	return modbus.NewClient(handler), nil
 }
 
+func PostJson(url string, b []byte) (*http.Response, error) {
+	//post to server
+	c := &http.Client{ Timeout: 5 * time.Second, }
+	reqNew := bytes.NewBuffer([]byte(b))
+	req, _ := http.NewRequest("POST", url + "/", reqNew)
+	req.Header.Add("Content-type", "application/json")
+	return c.Do(req)
+}
+
+
 func ReadData(client modbus.Client, m map[string]Table) {
+	var MessageSend = make([]TableNew{})
+	
 	//根据点表通过modbusTCP从设备读取数据
 	for key, value := range m{
 		if strings.Contains(key, "."){	
@@ -76,6 +105,7 @@ func ReadData(client modbus.Client, m map[string]Table) {
 				return
 			}
 			b := GetBit1(r, register_bit)
+			m[key] = 
 			log.Printf("%s : %t", value.Define, b) 
 		}else {							
 			//read 16-bits
@@ -87,6 +117,28 @@ func ReadData(client modbus.Client, m map[string]Table) {
 			}
 			log.Printf("%s : %d", value.Define, r)
 		}
+		//log.Print(m)
+		MessageSend = append(MessageSend, MessageSend{
+//			...: ....,
+			Define: value.Define,
+			
+			
+		})
+		
+//		rsp, e := PostJson("http://119.254.97.87:8010/api/sync/data" ,r)
+//		if e != nil{
+//			log.Printf("Send request to failed: %v", e)
+//			break
+//		}
+//		defer rsp.Body.Close()
+			
+//		if rsp.StatusCode != 201 && rsp.StatusCode != 200 {
+//			body, _ := ioutil.ReadAll(rsp.Body)
+//			log.Print(string(body))
+//		} else {
+//			log.Printf("Post to Success")
+//		}
+
 	}
 }
 
@@ -116,7 +168,7 @@ func main() {
 	//读取数据
 	for{
 		ReadData(client, PointTable)
-		time.Sleep(time.Second * 2)	
+		time.Sleep(time.Second * 10)	
 	}
 	
 }
