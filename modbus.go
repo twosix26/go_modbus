@@ -8,6 +8,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
+//	"fmt"
 //	"net/url"
 	"net/http"
 	"git.leaniot.cn/publicLib/go-modbus"
@@ -29,12 +30,15 @@ type TableNew struct {
 	Digits 	int 	`json:"digits"`
 	Data  	interface{}	`json:"data"`
 }
+type TableSend struct {
+	Key		string
+	Data	interface{}							
+}
 
-//type MessageSend struct {
-	
-//}
-
- 
+type MessageSender struct {
+//	Data 	[]TableNew `json:"data"`
+	Data	[]TableSend `json:"data"`
+}
 
 type Device struct {
 	Address string  `yaml:"address"`
@@ -88,12 +92,13 @@ func PostJson(url string, b []byte) (*http.Response, error) {
 	return c.Do(req)
 }
 
-
+//type MessageSend []TableNew
 func ReadData(client modbus.Client, m map[string]Table) {
-	var MessageSend = make([]TableNew{})
-	
+//	MessageSend := make([]TableNew{})
+	var MessageSend []TableSend
+	var reg interface{}
 	//根据点表通过modbusTCP从设备读取数据
-	for key, value := range m{
+	for key/*, value */:= range m{
 		if strings.Contains(key, "."){	
 			//read a bit
 			address := strings.Split(key,".")
@@ -104,9 +109,9 @@ func ReadData(client modbus.Client, m map[string]Table) {
 				log.Println(err)
 				return
 			}
-			b := GetBit1(r, register_bit)
-			m[key] = 
-			log.Printf("%s : %t", value.Define, b) 
+			reg = GetBit1(r, register_bit)
+//			reg = b
+//			log.Printf("%s : %t", value.Define, b) 
 		}else {							
 			//read 16-bits
 			register := String2Uint16(key) 
@@ -115,31 +120,42 @@ func ReadData(client modbus.Client, m map[string]Table) {
 				log.Println(err)
 				return
 			}
-			log.Printf("%s : %d", value.Define, r)
+			reg = r
+//			log.Printf("%s : %d", value.Define, r)
 		}
-		//log.Print(m)
-		MessageSend = append(MessageSend, MessageSend{
-//			...: ....,
-			Define: value.Define,
-			
-			
-		})
-		
-//		rsp, e := PostJson("http://119.254.97.87:8010/api/sync/data" ,r)
-//		if e != nil{
-//			log.Printf("Send request to failed: %v", e)
-//			break
-//		}
-//		defer rsp.Body.Close()
-			
-//		if rsp.StatusCode != 201 && rsp.StatusCode != 200 {
-//			body, _ := ioutil.ReadAll(rsp.Body)
-//			log.Print(string(body))
-//		} else {
-//			log.Printf("Post to Success")
-//		}
-
+		MessageSendBuffer := TableSend{			
+//			Define: value.Define,
+//			Unit:	value.Unit,
+//			Type: 	value.Type,
+//			Digits:	value.Digits,
+			Data:  	reg,	
+			Key:	key,
+		}
+		MessageSend = append(MessageSend, MessageSendBuffer)
 	}
+		//fmt.Println(MessageSend)
+		MessageSendd := MessageSender{
+			Data:	 MessageSend,
+		}
+		b, e := json.Marshal(MessageSendd)
+		if e != nil { log.Print(e) }
+		log.Println(string(b))
+		rsp, e := PostJson("http://119.254.97.87:8010/api/sync/data" ,b)
+		if e != nil{
+			log.Printf("Send request to failed: %v", e)
+			return
+		}
+		defer rsp.Body.Close()
+			
+		if rsp.StatusCode != 201 && rsp.StatusCode != 200 {
+			body, _ := ioutil.ReadAll(rsp.Body)
+			log.Print(string(body))
+		} else {
+			log.Printf("Post to Success")
+		}
+
+	
+	//log.Println(MessageSend)
 }
 
 func ConfigInit() {
