@@ -37,7 +37,8 @@ type TableSend struct {
 
 type MessageSender struct {
 //	Data 	[]TableNew `json:"data"`
-	Data	[]TableSend `json:"data"`
+//	Data	[]TableSend `json:"data"`
+	Data	map[string]interface{} `json:"data"`
 }
 
 type Device struct {
@@ -95,7 +96,8 @@ func PostJson(url string, b []byte) (*http.Response, error) {
 //type MessageSend []TableNew
 func ReadData(client modbus.Client, m map[string]Table) {
 //	MessageSend := make([]TableNew{})
-	var MessageSend []TableSend
+//	var MessageSend []TableSend
+	var MessageSend map[string]interface{}
 	var reg interface{}
 	//根据点表通过modbusTCP从设备读取数据
 	for key/*, value */:= range m{
@@ -123,19 +125,29 @@ func ReadData(client modbus.Client, m map[string]Table) {
 			reg = r
 //			log.Printf("%s : %d", value.Define, r)
 		}
-		MessageSendBuffer := TableSend{			
+//		type ToSend []map[string]interface{}
+		
+//		var ToSendObj = make([]map[string]interface{}, 10)
+		
+//		MessageSendBuffer := TableSend{			
 //			Define: value.Define,
 //			Unit:	value.Unit,
 //			Type: 	value.Type,
 //			Digits:	value.Digits,
-			Data:  	reg,	
-			Key:	key,
-		}
-		MessageSend = append(MessageSend, MessageSendBuffer)
+//			Data:  	reg,	
+//			Key:	key,
+//		}
+//		MessageSend = append(MessageSend, MessageSendBuffer)
+		
+		v := make(map[string]interface{})
+		v[key] = reg
+		MessageSend = v
+//		ToSend = append(ToSend, )
+		
 	}
 		//fmt.Println(MessageSend)
 		MessageSendd := MessageSender{
-			Data:	 MessageSend,
+			Data:	MessageSend,
 		}
 		b, e := json.Marshal(MessageSendd)
 		if e != nil { log.Print(e) }
