@@ -10,6 +10,7 @@ import (
 	"io/ioutil"
 //	"fmt"
 //	"net/url"
+	"encoding/binary"
 	"net/http"
 	"git.leaniot.cn/publicLib/go-modbus"
 	"gopkg.in/yaml.v2"
@@ -36,14 +37,15 @@ type TableSend struct {
 }
 
 type MessageSender struct {
-//	Data 	[]TableNew `json:"data"`
-//	Data	[]TableSend `json:"data"`
-	Data	map[string]interface{} `json:"data"`
+	Data	[]map[string]interface{} `json:"data"`
 }
 
 type Device struct {
-	Address string  `yaml:"address"`
-	SlaveId	byte    `yaml:"slave_id"`
+	Jsonfile    string  `yaml:"filename"`	//点表文件
+	Address 	string  `yaml:"address"`	//设备地址
+	SlaveId		byte    `yaml:"slave_id"`	//
+	DeviceID 	int		`yaml:"device_id"`	//变频器设备ID
+	Posturl		string  `yaml:"post_url"`	//post到后端url
 }
 
 type Config struct {
@@ -56,7 +58,7 @@ func GetBit1(word []byte, bit uint16) bool {
 
 func DataPointTabler(output map[string]Table)  {
 	//解析json文件点表
-	b, e := ioutil.ReadFile("data_map2.json")
+	b, e := ioutil.ReadFile(config.Device[0].Jsonfile)
 	if e != nil {panic(e)}
 	if e = json.Unmarshal(b, &output); e != nil {panic(e)}
 }
@@ -93,81 +95,65 @@ func PostJson(url string, b []byte) (*http.Response, error) {
 	return c.Do(req)
 }
 
-//type MessageSend []TableNew
-func ReadData(client modbus.Client, m map[string]Table) {
-//	MessageSend := make([]TableNew{})
-//	var MessageSend []TableSend
-	var MessageSend map[string]interface{}
+func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
+	var MessageSendArray= make(map[string]interface{})
 	var reg interface{}
 	//根据点表通过modbusTCP从设备读取数据
-	for key/*, value */:= range m{
-		if strings.Contains(key, "."){	
+	for key := range m {
+		if strings.Contains(key, ".") {
 			//read a bit
-			address := strings.Split(key,".")
+			address := strings.Split(key, ".")
+			addr := address[0] + "_" + address[1]
 			register := String2Uint16(address[0])
 			register_bit := String2Uint16(address[1])
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
 				log.Println(err)
-				return
+				break
 			}
 			reg = GetBit1(r, register_bit)
-//			reg = b
-//			log.Printf("%s : %t", value.Define, b) 
-		}else {							
+			MessageSendArray[addr] = reg
+		} else {
 			//read 16-bits
-			register := String2Uint16(key) 
+			register := String2Uint16(key)
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
 				log.Println(err)
-				return
+				break
 			}
 			reg = r
-//			log.Printf("%s : %d", value.Define, r)
+			for i := 0; i < len(r); i += 2 {	//byte to int
+				reg = binary.BigEndian.Uint16(r[i : i+2])
+			}
+			MessageSendArray[key] = reg
 		}
-//		type ToSend []map[string]interface{}
-		
-//		var ToSendObj = make([]map[string]interface{}, 10)
-		
-//		MessageSendBuffer := TableSend{			
-//			Define: value.Define,
-//			Unit:	value.Unit,
-//			Type: 	value.Type,
-//			Digits:	value.Digits,
-//			Data:  	reg,	
-//			Key:	key,
-//		}
-//		MessageSend = append(MessageSend, MessageSendBuffer)
-		
-		v := make(map[string]interface{})
-		v[key] = reg
-		MessageSend = v
-//		ToSend = append(ToSend, )
-		
 	}
-		//fmt.Println(MessageSend)
-		MessageSendd := MessageSender{
-			Data:	MessageSend,
-		}
-		b, e := json.Marshal(MessageSendd)
-		if e != nil { log.Print(e) }
-		log.Println(string(b))
-		rsp, e := PostJson("http://119.254.97.87:8010/api/sync/data" ,b)
-		if e != nil{
-			log.Printf("Send request to failed: %v", e)
-			return
-		}
-		defer rsp.Body.Close()
-			
-		if rsp.StatusCode != 201 && rsp.StatusCode != 200 {
-			body, _ := ioutil.ReadAll(rsp.Body)
-			log.Print(string(body))
-		} else {
-			log.Printf("Post to Success")
-		}
+	MessageSendArray["5000"] = config.Device[0].SlaveId		//添加设备ID到“5000”字段
+	messageSender := MessageSender{}
+	messageSender.Data = append(messageSender.Data, MessageSendArray)
 
-	
-	//log.Println(MessageSend)
+	return messageSender
+}
+
+func SendData(messageSender MessageSender){
+	//向后端接口发送数据
+	b, e := json.Marshal(messageSender)		//序列化json
+	if e != nil { log.Print(e) }
+	//log.Println(string(b))
+	rsp, e := PostJson(config.Device[0].Posturl ,b)
+	if e != nil{
+		log.Printf("Send request to failed: %v", e)
+		return
+	}
+	defer rsp.Body.Close()
+			
+	if rsp.StatusCode != 201 && rsp.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(rsp.Body)
+		log.Print(string(body))
+	} else {
+		log.Printf("Post to Success")
+	}
+
 }
 
 func ConfigInit() {
@@ -195,7 +181,8 @@ func main() {
 	
 	//读取数据
 	for{
-		ReadData(client, PointTable)
+		message := ReadData(client, PointTable)
+		SendData(message)
 		time.Sleep(time.Second * 10)	
 	}
 	
