@@ -109,7 +109,8 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
 				log.Println(err)
-				break
+                log.Println(key)
+                break
 			}
 			reg = GetBit1(r, register_bit)
 			MessageSendArray[addr] = reg
@@ -119,6 +120,7 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
 				log.Println(err)
+                log.Println(key)
 				break
 			}
 			reg = r
