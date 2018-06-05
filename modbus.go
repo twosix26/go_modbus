@@ -12,6 +12,7 @@ import (
 //	"net/url"
 	"encoding/binary"
 	"net/http"
+    _ "net/http/pprof"
 	"git.leaniot.cn/publicLib/go-modbus"
 	"gopkg.in/yaml.v2"
 )
@@ -44,7 +45,7 @@ type Device struct {
 	Jsonfile    string  `yaml:"filename"`	//点表文件
 	Address 	string  `yaml:"address"`	//设备地址
 	SlaveId		byte    `yaml:"slave_id"`	//
-	DeviceID 	int		`yaml:"device_id"`	//变频器设备ID
+	DeviceID 	string	`yaml:"device_id"`	//变频器设备ID
 	Posturl		string  `yaml:"post_url"`	//post到后端url
 }
 
@@ -75,7 +76,7 @@ func String2Uint16(s string) uint16 {
 func GenModbusClient() (modbus.Client, error){
 	//建立modbusTCP连接
 	handler := modbus.NewTCPClientHandler(config.Device[0].Address)
-	handler.Timeout = 10 * time.Second
+	handler.Timeout = 20 * time.Second
 	handler.SlaveId = config.Device[0].SlaveId	
 	e := handler.Connect()
 	if e != nil {
@@ -103,7 +104,7 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 		if strings.Contains(key, ".") {
 			//read a bit
 			address := strings.Split(key, ".")
-			addr := address[0] + "_" + address[1]
+			//addr := address[0] + "_" + address[1]
 			register := String2Uint16(address[0])
 			register_bit := String2Uint16(address[1])
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
@@ -113,7 +114,7 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
                 break
 			}
 			reg = GetBit1(r, register_bit)
-			MessageSendArray[addr] = reg
+			MessageSendArray[key] = reg
 		} else {
 			//read 16-bits
 			register := String2Uint16(key)
@@ -130,10 +131,11 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 			MessageSendArray[key] = reg
 		}
 	}
-	MessageSendArray["5000"] = config.Device[0].SlaveId		//添加设备ID到“5000”字段
+	MessageSendArray["5000"] = config.Device[0].DeviceID		//添加设备ID到“5000”字段
 	messageSender := MessageSender{}
-	messageSender.Data = append(messageSender.Data, MessageSendArray)
 
+	messageSender.Data = append(messageSender.Data, MessageSendArray)
+	//log.Print(messageSender)
 	return messageSender
 }
 
@@ -163,7 +165,9 @@ func ConfigInit() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	configContent, _ := ioutil.ReadFile("config.yml")
 	yaml.Unmarshal(configContent, &config)
-
+    go func(){
+        log.Println(http.ListenAndServe(":6060",nil))
+    }()
 }
 
 func main() {
@@ -181,7 +185,7 @@ func main() {
 	PointTable := make(map[string]Table)
 	DataPointTabler(PointTable)
 	
-	//读取数据
+	//读取数据和上传数据
 	for{
 		message := ReadData(client, PointTable)
 		SendData(message)
