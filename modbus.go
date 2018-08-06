@@ -8,45 +8,44 @@ import (
 	"bytes"
 	"encoding/json"
 	"io/ioutil"
-//	"fmt"
-//	"net/url"
 	"encoding/binary"
 	"net/http"
-    _ "net/http/pprof"
+	_ "net/http/pprof"
 	"git.leaniot.cn/publicLib/go-modbus"
 	"gopkg.in/yaml.v2"
 )
+
 var config Config
 
 type Table struct {
-	Define	string 	`json:"define"`
-	Unit 	string 	`json:"unit"`
-	Type 	string 	`json:"type"`
-	Digits 	int 	`json:"digits"`
+	Define string `json:"define"`
+	Unit   string `json:"unit"`
+	Type   string `json:"type"`
+	Digits int    `json:"digits"`
 }
-type TableNew struct {
-	Key 	string  `json:"key"`
-	Define	string 	`json:"define"`
-	Unit 	string 	`json:"unit"`
-	Type 	string 	`json:"type"`
-	Digits 	int 	`json:"digits"`
-	Data  	interface{}	`json:"data"`
-}
-type TableSend struct {
-	Key		string
-	Data	interface{}							
-}
+//type TableNew struct {
+//	Key    string      `json:"key"`
+//	Define string      `json:"define"`
+//	Unit   string      `json:"unit"`
+//	Type   string      `json:"type"`
+//	Digits int         `json:"digits"`
+//	Data   interface{} `json:"data"`
+//}
+//type TableSend struct {
+//	Key  string
+//	Data interface{}
+//}
 
 type MessageSender struct {
-	Data	[]map[string]interface{} `json:"data"`
+	Data []map[string]interface{} `json:"data"`
 }
 
 type Device struct {
-	Jsonfile    string  `yaml:"filename"`	//点表文件
-	Address 	string  `yaml:"address"`	//设备地址
-	SlaveId		byte    `yaml:"slave_id"`	//
-	DeviceID 	string	`yaml:"device_id"`	//变频器设备ID
-	Posturl		string  `yaml:"post_url"`	//post到后端url
+	Jsonfile string `yaml:"filename"`  //点表文件
+	Address  string `yaml:"address"`   //设备地址
+	SlaveId  byte   `yaml:"slave_id"`  //
+	DeviceID string `yaml:"device_id"` //变频器设备ID
+	Posturl  string `yaml:"post_url"`  //post到后端url
 }
 
 type Config struct {
@@ -57,27 +56,31 @@ func GetBit1(word []byte, bit uint16) bool {
 	return uint(word[bit/8])>>(bit%8)&0x01 == 0x01
 }
 
-func DataPointTabler(output map[string]Table)  {
+func DataPointTabler(output map[string]Table) {
 	//解析json文件点表
 	b, e := ioutil.ReadFile(config.Device[0].Jsonfile)
-	if e != nil {panic(e)}
-	if e = json.Unmarshal(b, &output); e != nil {panic(e)}
+	if e != nil {
+		panic(e)
+	}
+	if e = json.Unmarshal(b, &output); e != nil {
+		panic(e)
+	}
 }
 
 func String2Uint16(s string) uint16 {
-    //将string类型转成uint16
-   	i, err := strconv.ParseUint(s, 10, 16) 
-    if err != nil {
-        panic(err)
-    }
-    return uint16(i)
+	//将string类型转成uint16
+	i, err := strconv.ParseUint(s, 10, 16)
+	if err != nil {
+		panic(err)
+	}
+	return uint16(i)
 }
 
-func GenModbusClient() (modbus.Client, error){
+func GenModbusClient() (modbus.Client, error) {
 	//建立modbusTCP连接
 	handler := modbus.NewTCPClientHandler(config.Device[0].Address)
 	handler.Timeout = 20 * time.Second
-	handler.SlaveId = config.Device[0].SlaveId	
+	handler.SlaveId = config.Device[0].SlaveId
 	e := handler.Connect()
 	if e != nil {
 		log.Fatalf("%v", e)
@@ -89,15 +92,15 @@ func GenModbusClient() (modbus.Client, error){
 
 func PostJson(url string, b []byte) (*http.Response, error) {
 	//post to server
-	c := &http.Client{ Timeout: 5 * time.Second, }
+	c := &http.Client{Timeout: 5 * time.Second,}
 	reqNew := bytes.NewBuffer([]byte(b))
-	req, _ := http.NewRequest("POST", url + "/", reqNew)
+	req, _ := http.NewRequest("POST", url+"/", reqNew)
 	req.Header.Add("Content-type", "application/json")
 	return c.Do(req)
 }
 
 func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
-	var MessageSendArray= make(map[string]interface{})
+	var MessageSendArray = make(map[string]interface{})
 	var reg interface{}
 	//根据点表通过modbusTCP从设备读取数据
 	for key := range m {
@@ -110,8 +113,8 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
 				log.Println(err)
-                log.Println(key)
-                break
+				log.Println(key)
+				break
 			}
 			reg = GetBit1(r, register_bit)
 			MessageSendArray[key] = reg
@@ -121,17 +124,17 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
 				log.Println(err)
-                log.Println(key)
+				log.Println(key)
 				break
 			}
 			reg = r
-			for i := 0; i < len(r); i += 2 {	//byte to int
+			for i := 0; i < len(r); i += 2 { //byte to int
 				reg = binary.BigEndian.Uint16(r[i : i+2])
 			}
 			MessageSendArray[key] = reg
 		}
 	}
-	MessageSendArray["5000"] = config.Device[0].DeviceID		//添加设备ID到“5000”字段
+	MessageSendArray["5000"] = config.Device[0].DeviceID //添加设备ID到“5000”字段
 	messageSender := MessageSender{}
 
 	messageSender.Data = append(messageSender.Data, MessageSendArray)
@@ -139,18 +142,20 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 	return messageSender
 }
 
-func SendData(messageSender MessageSender){
+func SendData(messageSender MessageSender) {
 	//向后端接口发送数据
-	b, e := json.Marshal(messageSender)		//序列化json
-	if e != nil { log.Print(e) }
+	b, e := json.Marshal(messageSender) //序列化json
+	if e != nil {
+		log.Print(e)
+	}
 	//log.Println(string(b))
-	rsp, e := PostJson(config.Device[0].Posturl ,b)
-	if e != nil{
+	rsp, e := PostJson(config.Device[0].Posturl, b)
+	if e != nil {
 		log.Printf("Send request to failed: %v", e)
 		return
 	}
 	defer rsp.Body.Close()
-			
+
 	if rsp.StatusCode != 201 && rsp.StatusCode != 200 {
 		body, _ := ioutil.ReadAll(rsp.Body)
 		log.Print(string(body))
@@ -165,18 +170,18 @@ func ConfigInit() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	configContent, _ := ioutil.ReadFile("config.yml")
 	yaml.Unmarshal(configContent, &config)
-    go func(){
-        log.Println(http.ListenAndServe(":6060",nil))
-    }()
+	go func() {
+		log.Println(http.ListenAndServe(":6060", nil))
+	}()
 }
 
 func main() {
 	//初始化
 	ConfigInit()
-	
+
 	//建立连接
 	client, e := GenModbusClient()
-	if e != nil{
+	if e != nil {
 		log.Fatalf("%v", e)
 		return
 	}
@@ -184,12 +189,12 @@ func main() {
 	//解析json点表
 	PointTable := make(map[string]Table)
 	DataPointTabler(PointTable)
-	
+
 	//读取数据和上传数据
-	for{
+	for {
 		message := ReadData(client, PointTable)
 		SendData(message)
-		time.Sleep(time.Second * 10)	
+		time.Sleep(time.Second * 10)
 	}
-	
+
 }
