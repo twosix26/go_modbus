@@ -138,7 +138,7 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 	messageSender := MessageSender{}
 
 	messageSender.Data = append(messageSender.Data, MessageSendArray)
-	//log.Print(messageSender)
+	log.Print(messageSender)
 	return messageSender
 }
 
