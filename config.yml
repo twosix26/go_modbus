@@ -1,6 +1,8 @@
 device:
   - filename: "data_map_two.json"
-    address: "169.254.11.7:502"
+    address: "192.168.0.64:502"
+#    address: "169.254.11.7:502"
     slave_id: 6
     device_id: "no7"
-    post_url: "http://124.207.211.211:8000/raw"
+#    post_url: "http://124.207.211.211:8000/raw"
+    post_url: "http://localhost:8000/raw"

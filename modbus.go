@@ -13,6 +13,7 @@ import (
 	_ "net/http/pprof"
 	"git.leaniot.cn/publicLib/go-modbus"
 	"gopkg.in/yaml.v2"
+	"errors"
 )
 
 var config Config
@@ -23,6 +24,7 @@ type Table struct {
 	Type   string `json:"type"`
 	Digits int    `json:"digits"`
 }
+
 //type TableNew struct {
 //	Key    string      `json:"key"`
 //	Define string      `json:"define"`
@@ -83,7 +85,7 @@ func GenModbusClient() (modbus.Client, error) {
 	handler.SlaveId = config.Device[0].SlaveId
 	e := handler.Connect()
 	if e != nil {
-		log.Fatalf("%v", e)
+		log.Printf("%v", e)
 		return nil, e
 	}
 	defer handler.Close()
@@ -99,9 +101,10 @@ func PostJson(url string, b []byte) (*http.Response, error) {
 	return c.Do(req)
 }
 
-func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
+func ReadData(client modbus.Client, m map[string]Table) (MessageSender, error) {
 	var MessageSendArray = make(map[string]interface{})
 	var reg interface{}
+	var stop error
 	//根据点表通过modbusTCP从设备读取数据
 	for key := range m {
 		if strings.Contains(key, ".") {
@@ -112,6 +115,7 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 			register_bit := String2Uint16(address[1])
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
+				stop = errors.New("error")
 				log.Println(err)
 				log.Println(key)
 				break
@@ -123,6 +127,7 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 			register := String2Uint16(key)
 			r, err := client.ReadHoldingRegisters(uint16(register), 1)
 			if err != nil {
+				stop = errors.New("error")
 				log.Println(err)
 				log.Println(key)
 				break
@@ -139,7 +144,7 @@ func ReadData(client modbus.Client, m map[string]Table) (MessageSender) {
 
 	messageSender.Data = append(messageSender.Data, MessageSendArray)
 	log.Print(messageSender)
-	return messageSender
+	return messageSender, stop
 }
 
 func SendData(messageSender MessageSender) {
@@ -170,31 +175,38 @@ func ConfigInit() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile)
 	configContent, _ := ioutil.ReadFile("config.yml")
 	yaml.Unmarshal(configContent, &config)
-	go func() {
-		log.Println(http.ListenAndServe(":6060", nil))
-	}()
+	//go func() {
+	//	log.Println(http.ListenAndServe(":6060", nil))
+	//}()
 }
 
 func main() {
 	//初始化
 	ConfigInit()
 
-	//建立连接
-	client, e := GenModbusClient()
-	if e != nil {
-		log.Fatalf("%v", e)
-		return
-	}
-
 	//解析json点表
 	PointTable := make(map[string]Table)
 	DataPointTabler(PointTable)
 
-	//读取数据和上传数据
 	for {
-		message := ReadData(client, PointTable)
-		SendData(message)
-		time.Sleep(time.Second * 10)
+		//建立连接
+		client, e := GenModbusClient()
+		if e != nil {
+			log.Printf("%v", e)
+			time.Sleep(time.Second * 5)
+			continue
+		}
+
+		//读取数据和上传数据
+		for {
+			message, e:= ReadData(client, PointTable)
+			if e != nil{
+				log.Printf("Connct closed")
+				break
+			}
+			SendData(message)
+			time.Sleep(time.Second * 5)
+		}
 	}
 
 }
